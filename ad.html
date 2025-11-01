@@ -3,10 +3,29 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ad Redirect</title>
-<script>
-window.onload=()=>{window.location.href='https://1adminer1.netlify.app/adverify.html';};
-</script>
+<title>Ad Boost</title>
 </head>
-<body></body>
+<body>
+<script>
+// ensure device ID and wallet balance exist
+if (!localStorage.device_id) localStorage.device_id = 'dev-' + Math.random().toString(36).slice(2,11);
+if (!localStorage.wallet_balance) localStorage.wallet_balance = '0';
+
+// --- ad boost settings ---
+const now = Date.now();
+const BOOST_DURATION_MS = 60 * 1000; // 1 minute
+const BOOST_RATE = 0.00003; // per second
+const COOLDOWN_MS = 3 * 60 * 60 * 1000; // 3 hours
+const lastAd = parseInt(localStorage.last_ad_boost || 0);
+
+// apply boost only if cooldown passed
+if(now - lastAd > COOLDOWN_MS){
+    localStorage.boost_end = now + BOOST_DURATION_MS;
+    localStorage.last_ad_boost = now;
+}
+
+// redirect to wallet after applying boost
+window.location.href = 'wallet.html';
+</script>
+</body>
 </html>
