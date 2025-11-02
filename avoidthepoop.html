@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Avoid the Poop 💩</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #a8e6ff;
+      font-family: 'Comic Sans MS', sans-serif;
+    }
+
+    #game {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background: linear-gradient(#a8e6ff, #e0f7fa);
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    #player {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 48px;
+      transition: left 0.1s;
+      user-select: none;
+    }
+
+    .poop {
+      position: absolute;
+      font-size: 40px;
+      animation: fall 3s linear infinite;
+      user-select: none;
+    }
+
+    @keyframes fall {
+      from { top: -50px; }
+      to { top: 100vh; }
+    }
+
+    #score {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 24px;
+      font-weight: bold;
+      user-select: none;
+    }
+
+    #gameover {
+      display: none;
+      position: absolute;
+      top: 40%;
+      width: 100%;
+      text-align: center;
+      font-size: 48px;
+      color: red;
+    }
+
+    button {
+      font-size: 24px;
+      padding: 10px 20px;
+      border-radius: 10px;
+      background: #ffcccc;
+      border: none;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #ffaaaa;
+    }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <div id="score">Score: 0</div>
+    <div id="gameover">💩 Game Over! 💩<br><button id="restart">Restart</button></div>
+    <div id="player">🧍</div>
+  </div>
+
+  <script>
+    const game = document.getElementById('game');
+    const player = document.getElementById('player');
+    const scoreDisplay = document.getElementById('score');
+    const gameover = document.getElementById('gameover');
+    const restartBtn = document.getElementById('restart');
+
+    let score = 0;
+    let playing = true;
+    let playerX = window.innerWidth / 2;
+
+    // === DESKTOP MOUSE CONTROL ===
+    document.addEventListener('mousemove', e => {
+      if (playing) {
+        playerX = e.clientX;
+        player.style.left = playerX - 20 + 'px';
+      }
+    });
+
+    // === MOBILE TOUCH CONTROL ===
+    game.addEventListener('touchmove', e => {
+      if (playing && e.touches.length > 0) {
+        const touch = e.touches[0];
+        playerX = touch.clientX;
+        player.style.left = playerX - 20 + 'px';
+      }
+    });
+
+    function createPoop() {
+      const poop = document.createElement('div');
+      poop.textContent = '💩';
+      poop.classList.add('poop');
+      poop.style.left = Math.random() * window.innerWidth + 'px';
+      game.appendChild(poop);
+
+      let fallSpeed = 2 + Math.random() * 4;
+      let poopY = -50;
+      const fall = setInterval(() => {
+        if (!playing) {
+          clearInterval(fall);
+          poop.remove();
+          return;
+        }
+        poopY += fallSpeed;
+        poop.style.top = poopY + 'px';
+
+        // collision detection
+        const playerRect = player.getBoundingClientRect();
+        const poopRect = poop.getBoundingClientRect();
+        if (
+          poopRect.bottom > playerRect.top &&
+          poopRect.left < playerRect.right &&
+          poopRect.right > playerRect.left &&
+          poopRect.top < playerRect.bottom
+        ) {
+          gameOver();
+          clearInterval(fall);
+        }
+
+        if (poopY > window.innerHeight) {
+          poop.remove();
+          score++;
+          scoreDisplay.textContent = 'Score: ' + score;
+          clearInterval(fall);
+        }
+      }, 20);
+    }
+
+    function gameOver() {
+      playing = false;
+      gameover.style.display = 'block';
+    }
+
+    restartBtn.addEventListener('click', () => {
+      score = 0;
+      scoreDisplay.textContent = 'Score: 0';
+      gameover.style.display = 'none';
+      playing = true;
+      gameLoop();
+    });
+
+    function gameLoop() {
+      if (playing) {
+        createPoop();
+        setTimeout(gameLoop, 700 - Math.min(score * 10, 500)); // faster over time
+      }
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
