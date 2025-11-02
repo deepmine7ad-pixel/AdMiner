@@ -3,201 +3,618 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Mini Wizard RPG 🧙‍♂️</title>
+<title>Mobile Wizard RPG — Complete</title>
+<meta name="description" content="Mobile-only wizard RPG — joystick, combat, quests, shop, equipment, multi-maps, save" />
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#87ceeb;font-family:sans-serif;}
-  canvas{display:block;touch-action:none;}
-  #ui{position:fixed;top:10px;left:10px;color:white;background:rgba(0,0,0,0.4);padding:8px 12px;border-radius:8px;font-weight:bold;}
-  #joystick{position:fixed;left:15px;bottom:15px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,0.05);display:none;}
-  #stick{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,0.25);}
-  #btn-attack{position:fixed;right:20px;bottom:20px;width:80px;height:80px;border-radius:50%;background:rgba(255,100,100,0.4);color:white;font-size:28px;display:none;align-items:center;justify-content:center;}
-  #btn-restart{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:red;color:white;font-size:24px;padding:12px 20px;border:none;border-radius:8px;display:none;}
-  @media(max-width:900px){#joystick{display:block;}#btn-attack{display:flex;}}
+  html,body{height:100%;margin:0;font-family:system-ui, -apple-system, Roboto, Arial, sans-serif;background:#8fd37b;overflow:hidden; -webkit-user-select:none; user-select:none;}
+  canvas{display:block;touch-action:none;background:linear-gradient(#8fd37b,#78c167);}
+  /* UI */
+  #ui { position:fixed; left:10px; top:8px; z-index:20; background:rgba(0,0,0,0.45); color:#fff; padding:8px 10px; border-radius:8px; font-size:13px; }
+  #inventory { position:fixed; left:10px; top:60px; z-index:20; background:rgba(0,0,0,0.35); color:#fff; padding:8px; border-radius:8px; font-size:13px; max-width:220px; }
+  #joystick { position:fixed; left:12px; bottom:12px; width:120px; height:120px; border-radius:50%; background:rgba(255,255,255,0.08); z-index:18; touch-action:none; }
+  #stick { position:absolute; left:50%; top:50%; width:44px; height:44px; transform:translate(-50%,-50%); border-radius:50%; background:rgba(0,0,0,0.25); }
+  .btn { position:fixed; z-index:18; width:72px; height:72px; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:28px; color:#fff; }
+  #btn-attack { right:12px; bottom:12px; background:rgba(255,80,80,0.6); }
+  #btn-use { right:100px; bottom:12px; background:rgba(60,200,100,0.6); }
+  #btn-talk { right:100px; bottom:100px; background:rgba(70,140,255,0.6); }
+  #dialog { position:fixed; left:50%; bottom:18%; transform:translateX(-50%); background:rgba(0,0,0,0.75); color:#fff; padding:10px 14px; border-radius:10px; z-index:21; display:none; max-width:85%; text-align:center; }
+  /* shop modal */
+  #shopModal { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:40; background:#0b1020; color:#fff; padding:12px; border-radius:12px; display:none; width:86%; max-width:420px; box-shadow:0 8px 24px rgba(0,0,0,0.5); }
+  #shopModal h3{margin:0 0 8px 0;font-size:18px}
+  .shopRow{display:flex;justify-content:space-between;margin:6px 0}
+  .shopBtn{background:#1b7; color:#021; padding:6px 8px;border-radius:8px;font-weight:bold}
+  .closeBtn{background:#b33;color:#fff;padding:6px 8px;border-radius:8px}
+  /* small helper */
+  .small{font-size:12px;color:#ddd}
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
-<div id="ui">HP: <span id="hp">10</span> | Mana: <span id="mana">10</span> | Coins: <span id="coins">0</span></div>
+<canvas id="game"></canvas>
+
+<div id="ui">
+  HP: <span id="hp">10</span> • Mana: <span id="mana">10</span><br>
+  LV: <span id="level">1</span> • XP: <span id="xp">0</span> • 💰: <span id="coins">0</span>
+</div>
+
+<div id="inventory">Inv: <span id="inv-list">p:0 m:0</span><br>Equip: <span id="equip">—</span></div>
+
 <div id="joystick"><div id="stick"></div></div>
-<div id="btn-attack">🔥</div>
-<button id="btn-restart">Restart</button>
+<div id="btn-talk" class="btn">💬</div>
+<div id="btn-use" class="btn">🧪</div>
+<div id="btn-attack" class="btn">🔥</div>
+<div id="dialog"></div>
+
+<div id="shopModal" aria-hidden="true">
+  <h3>Shop</h3>
+  <div class="small">Coins: <span id="shopCoins">0</span></div>
+  <div class="shopRow"><div>Potion</div><div><button class="shopBtn" data-buy="potion" data-price="5">Buy 5💰</button></div></div>
+  <div class="shopRow"><div>Mana Potion</div><div><button class="shopBtn" data-buy="manapotion" data-price="7">Buy 7💰</button></div></div>
+  <div class="shopRow"><div>Fire Wand (weapon)</div><div><button class="shopBtn" data-buy="firewand" data-price="25">Buy 25💰</button></div></div>
+  <div style="text-align:right;margin-top:8px"><button class="closeBtn" id="closeShop">Close</button></div>
+</div>
 
 <script>
-const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
-let W=canvas.width=innerWidth,H=canvas.height=innerHeight;
-onresize=()=>{W=canvas.width=innerWidth;H=canvas.height=innerHeight;};
-
-const TILE=48,MAP_W=40,MAP_H=30;
-let map=[];
-for(let y=0;y<MAP_H;y++){
-  map[y]=[];
-  for(let x=0;x<MAP_W;x++)
-    map[y][x]=(x==0||y==0||x==MAP_W-1||y==MAP_H-1||Math.random()<0.05)?1:0;
-}
-
-const player={x:MAP_W*TILE/2,y:MAP_H*TILE/2,w:28,h:32,hp:10,mana:10,dir:{x:1,y:0},speed:2.3,cool:0};
-const projectiles=[],enemies=[],coins=[];
-let score=0,gameOver=false;
-
-function spawnEnemy(){
-  const ex=Math.random()*(MAP_W-2)*TILE+TILE,ey=Math.random()*(MAP_H-2)*TILE+TILE;
-  enemies.push({x:ex,y:ey,w:26,h:30,hp:3,speed:1.3,cool:0});
-}
-for(let i=0;i<7;i++)spawnEnemy();
-
-const keys={};
-onkeydown=e=>{keys[e.key.toLowerCase()]=true;if(e.key===' ')cast();}
-onkeyup=e=>keys[e.key.toLowerCase()]=false;
-
-function tileAt(x,y){const tx=Math.floor(x/TILE),ty=Math.floor(y/TILE);return(map[ty]||[])[tx]??1;}
-function updateUI(){
-  document.getElementById('hp').textContent=player.hp;
-  document.getElementById('mana').textContent=player.mana;
-  document.getElementById('coins').textContent=score;
-}
-
-function cast(){
-  if(player.cool>0||player.mana<=0)return;
-  player.cool=20;
-  player.mana--;
-  const sp=5;
-  projectiles.push({
-    x:player.x,y:player.y,
-    vx:player.dir.x*sp,vy:player.dir.y*sp,
-    life:100
-  });
-}
-
-// joystick controls
-const joystick=document.getElementById('joystick'),stick=document.getElementById('stick');
-let joy={x:0,y:0,active:false};
-function startStick(e){joy.active=true;updateStick(e.touches?e.touches[0]:e);}
-function moveStick(e){if(!joy.active)return;updateStick(e.touches?e.touches[0]:e);e.preventDefault();}
-function endStick(){joy.active=false;joy.x=joy.y=0;stick.style.left='50%';stick.style.top='50%';}
-function updateStick(t){
-  const r=joystick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
-  const dx=t.clientX-cx,dy=t.clientY-cy,max=r.width/2-20,mag=Math.hypot(dx,dy)||1;
-  const nx=Math.min(max,mag)*(dx/mag),ny=Math.min(max,mag)*(dy/mag);
-  stick.style.left=50+(nx/r.width*100)+'%';stick.style.top=50+(ny/r.height*100)+'%';
-  joy.x=nx/max;joy.y=ny/max;
-}
-joystick.addEventListener('touchstart',startStick);
-joystick.addEventListener('touchmove',moveStick);
-joystick.addEventListener('touchend',endStick);
-
-document.getElementById('btn-attack').onclick=cast;
-document.getElementById('btn-restart').onclick=()=>location.reload();
-
-const cam={x:0,y:0};
-let then=performance.now();
-function loop(now){
-  const dt=(now-then)/16;then=now;
-  update(dt);draw();
-  requestAnimationFrame(loop);
-}
-requestAnimationFrame(loop);
-
-function update(dt){
-  if(gameOver)return;
-  let ix=0,iy=0;
-  if(keys['w']||keys['arrowup'])iy-=1;
-  if(keys['s']||keys['arrowdown'])iy+=1;
-  if(keys['a']||keys['arrowleft'])ix-=1;
-  if(keys['d']||keys['arrowright'])ix+=1;
-  if(Math.abs(joy.x)>0.05||Math.abs(joy.y)>0.05){ix=joy.x;iy=joy.y;}
-  const mag=Math.hypot(ix,iy);
-  if(mag>0){player.dir={x:ix/mag,y:iy/mag};}
-
-  const sp=player.speed;
-  let nx=player.x+(ix/mag||0)*sp*dt,ny=player.y+(iy/mag||0)*sp*dt;
-  if(tileAt(nx-player.w/2,player.y)==1||tileAt(nx+player.w/2,player.y)==1)nx=player.x;
-  if(tileAt(player.x,ny-player.h/2)==1||tileAt(player.x,ny+player.h/2)==1)ny=player.y;
-  player.x=nx;player.y=ny;
-  if(player.cool>0)player.cool--;
-  if(player.mana<10 && Math.random()<0.02)player.mana+=0.05;
-
-  // projectiles
-  for(const p of projectiles){
-    p.x+=p.vx*dt*3;
-    p.y+=p.vy*dt*3;
-    p.life--;
+(() => {
+  // --- Canvas and DPR setup ---
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  let DPR = Math.max(1, window.devicePixelRatio || 1);
+  function resizeCanvas(){
+    const W = window.innerWidth, H = window.innerHeight;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
   }
-  for(let i=projectiles.length-1;i>=0;i--){
-    const p=projectiles[i];
-    if(p.life<=0){projectiles.splice(i,1);continue;}
-    for(const e of enemies){
-      if(Math.abs(p.x-e.x)<20 && Math.abs(p.y-e.y)<20){
-        e.hp--;
-        projectiles.splice(i,1);
-        if(e.hp<=0){
-          enemies.splice(enemies.indexOf(e),1);
-          coins.push({x:e.x,y:e.y});
-          score++;spawnEnemy();
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  // --- Game constants & maps ---
+  const TILE = 48;
+  const MAPS = {
+    home: { key:'home', w:20, h:12, tiles:[], gates:[], npcs:[], chest:null, shop:null },
+    village: { key:'village', w:24, h:14, tiles:[], gates:[], npcs:[], chest:null, shop:null },
+    forest: { key:'forest', w:26, h:16, tiles:[], gates:[], npcs:[], chest:null, shop:null }
+  };
+
+  // helper to create random tile array (0 floor, 1 wall) safely
+  function genTiles(w,h,wallChance){
+    const t = [];
+    for(let y=0;y<h;y++){
+      t[y] = [];
+      for(let x=0;x<w;x++){
+        if(x===0 || y===0 || x===w-1 || y===h-1) t[y][x] = 1;
+        else t[y][x] = Math.random() < wallChance ? 1 : 0;
+      }
+    }
+    return t;
+  }
+
+  // initialize maps
+  MAPS.home.tiles = genTiles(MAPS.home.w, MAPS.home.h, 0.02);
+  MAPS.village.tiles = genTiles(MAPS.village.w, MAPS.village.h, 0.07);
+  MAPS.forest.tiles = genTiles(MAPS.forest.w, MAPS.forest.h, 0.12);
+
+  // gates: home <-> village, village <-> forest
+  MAPS.home.gates.push({ x:(MAPS.home.w-2)*TILE, y:5*TILE, w:TILE, h:TILE, target:'village', tx:2*TILE+8, ty:5*TILE });
+  MAPS.village.gates.push({ x:2*TILE+8, y:5*TILE, w:TILE, h:TILE, target:'home', tx:(MAPS.home.w-3)*TILE, ty:5*TILE });
+  MAPS.village.gates.push({ x:(MAPS.village.w-2)*TILE, y:8*TILE, w:TILE, h:TILE, target:'forest', tx:2*TILE+8, ty:8*TILE });
+  MAPS.forest.gates.push({ x:2*TILE+8, y:8*TILE, w:TILE, h:TILE, target:'village', tx:(MAPS.village.w-3)*TILE, ty:8*TILE });
+
+  // NPCs & chest & shop positions
+  MAPS.home.npcs.push({ x:5*TILE, y:5*TILE, name:'Guard', dialog:'Welcome home! Open the chest to get items.' });
+  MAPS.home.chest = { x:6*TILE, y:6*TILE, opened:false };
+  MAPS.home.shop = { x:8*TILE, y:4*TILE };
+
+  MAPS.village.npcs.push({ x:8*TILE, y:6*TILE, name:'Elder', dialog:'Defeat 4 monsters and return.' });
+  MAPS.forest.npcs.push({ x:7*TILE, y:10*TILE, name:'Hermit', dialog:'Bring me a mana potion.' });
+
+  // --- persistent state (localStorage) ---
+  const SAVE_KEY = 'mobile_wizard_complete_v1';
+  let state = {
+    currentMap: 'home',
+    player: { x:3*TILE, y:6*TILE, hp:10, mana:10, xp:0, level:1, coins:0 },
+    inventory: { potion:0, manapotion:0 },
+    equipment: { weapon:null, wand:null, armor:null },
+    npcProgress: {}, // key like 'village_0' => progress or 999 if done
+    chestOpened: false
+  };
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if(raw){ const loaded = JSON.parse(raw); Object.assign(state, loaded); }
+  } catch(e){ console.warn('save load fail', e); }
+
+  // short refs
+  const player = state.player;
+  const INV = state.inventory;
+  const EQUIP = state.equipment;
+
+  // arrays for current map
+  let enemies = [];
+  let projectiles = [];
+  let items = [];
+  let coins = [];
+
+  // spawn helpers
+  function spawnEnemiesForMap(mapKey, count){
+    const m = MAPS[mapKey];
+    for(let i=0;i<count;i++){
+      // find floor tile
+      let ex=3*TILE, ey=3*TILE;
+      for(let k=0;k<80;k++){
+        const tx = Math.floor(Math.random()*(m.w-4))+2;
+        const ty = Math.floor(Math.random()*(m.h-4))+2;
+        if(m.tiles[ty][tx] === 0){ ex = tx*TILE + TILE/2; ey = ty*TILE + TILE/2; break; }
+      }
+      enemies.push({ x:ex, y:ey, hp:3, speed:1.0 + Math.random()*0.6, cool:0 });
+    }
+  }
+  function spawnItemsForMap(mapKey, count){
+    const m = MAPS[mapKey]; items = [];
+    for(let i=0;i<count;i++){
+      for(let k=0;k<80;k++){
+        const tx = Math.floor(Math.random()*(m.w-4))+2;
+        const ty = Math.floor(Math.random()*(m.h-4))+2;
+        if(m.tiles[ty][tx] === 0){
+          items.push({ x: tx*TILE + TILE/2, y: ty*TILE + TILE/2, type: Math.random()<0.5 ? 'potion' : 'manapotion' });
+          break;
         }
+      }
+    }
+    coins = [];
+  }
+
+  // initial enter map
+  function enterMap(mapKey, tx=null, ty=null){
+    state.currentMap = mapKey;
+    if(typeof tx === 'number' && typeof ty === 'number'){ player.x = tx; player.y = ty; }
+    enemies = []; projectiles = []; items = []; coins = [];
+    const base = mapKey === 'home' ? 2 : (mapKey === 'village' ? 5 : 6);
+    spawnEnemiesForMap(mapKey, base);
+    spawnItemsForMap(mapKey, 5);
+    saveState();
+    runGateEffect(); // show small effect
+  }
+
+  // save/load state
+  function saveState(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch(e){ console.warn('save fail', e); } }
+
+  // small pixel gate effect (visual wipe)
+  function runGateEffect(){
+    const cols = 18, rows = Math.ceil((canvas.height / canvas.width) * cols);
+    let step = 0, max = cols + rows + 6;
+    const overlayCanvas = document.createElement('canvas');
+    overlayCanvas.style.position = 'fixed';
+    overlayCanvas.style.left = '0';
+    overlayCanvas.style.top = '0';
+    overlayCanvas.style.width = window.innerWidth + 'px';
+    overlayCanvas.style.height = window.innerHeight + 'px';
+    overlayCanvas.width = canvas.width; overlayCanvas.height = canvas.height;
+    overlayCanvas.style.zIndex = 30; overlayCanvas.style.pointerEvents = 'none';
+    document.body.appendChild(overlayCanvas);
+    const octx = overlayCanvas.getContext('2d'); octx.setTransform(DPR,0,0,DPR,0,0);
+    function tick(){
+      octx.clearRect(0,0,overlayCanvas.width/DPR,overlayCanvas.height/DPR);
+      const bw = Math.ceil(window.innerWidth / cols), bh = Math.ceil(window.innerHeight / rows);
+      for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+        const dist = Math.hypot(c - cols/2, r - rows/2);
+        if(dist < step * 0.9){
+          octx.fillStyle = 'rgba(0,0,0,0.85)';
+          octx.fillRect(c*bw, r*bh, bw, bh);
+        }
+      }
+      step++;
+      if(step <= max) requestAnimationFrame(tick);
+      else { document.body.removeChild(overlayCanvas); }
+    }
+    tick();
+  }
+
+  // --- controls (mobile touch only) ---
+  const joystick = document.getElementById('joystick');
+  const stick = document.getElementById('stick');
+  let joy = { x:0, y:0, active:false };
+  joystick.addEventListener('touchstart', e => { e.preventDefault(); joy.active = true; updateStick(e.touches[0]); }, {passive:false});
+  joystick.addEventListener('touchmove', e => { e.preventDefault(); if(!joy.active) return; updateStick(e.touches[0]); }, {passive:false});
+  joystick.addEventListener('touchend', e => { joy.active = false; joy.x = 0; joy.y = 0; stick.style.left='50%'; stick.style.top='50%'; });
+
+  function updateStick(touch){
+    const r = joystick.getBoundingClientRect();
+    const cx = r.left + r.width/2, cy = r.top + r.height/2;
+    let dx = touch.clientX - cx, dy = touch.clientY - cy;
+    const max = r.width/2 - 14;
+    const mag = Math.hypot(dx, dy) || 1;
+    const nx = Math.min(max, mag) * (dx / mag);
+    const ny = Math.min(max, mag) * (dy / mag);
+    stick.style.left = 50 + (nx / r.width * 100) + '%';
+    stick.style.top  = 50 + (ny / r.height * 100) + '%';
+    joy.x = +(nx / max).toFixed(4);
+    joy.y = +(ny / max).toFixed(4);
+  }
+
+  // UI references
+  const hpEl = document.getElementById('hp'), manaEl = document.getElementById('mana'), xpEl = document.getElementById('xp'),
+        lvlEl = document.getElementById('level'), coinsEl = document.getElementById('coins'),
+        invListEl = document.getElementById('inv-list'), equipEl = document.getElementById('equip'),
+        dialogEl = document.getElementById('dialog');
+
+  // dialog helper
+  function showDialog(text, ms=1600){
+    dialogEl.style.display = 'block';
+    dialogEl.textContent = text;
+    clearTimeout(dialogEl._t);
+    dialogEl._t = setTimeout(()=> dialogEl.style.display = 'none', ms);
+  }
+
+  // buttons
+  document.getElementById('btn-attack').addEventListener('touchstart', e => { e.preventDefault(); castSpell(); }, {passive:false});
+  document.getElementById('btn-use').addEventListener('touchstart', e => { e.preventDefault(); useConsumable(); }, {passive:false});
+  document.getElementById('btn-talk').addEventListener('touchstart', e => { e.preventDefault(); interact(); }, {passive:false});
+
+  // shop modal logic
+  const shopModal = document.getElementById('shopModal');
+  const shopCoins = document.getElementById('shopCoins');
+  function openShop(){
+    shopCoins.textContent = player.coins;
+    shopModal.style.display = 'block';
+  }
+  document.getElementById('closeShop').addEventListener('click', ()=> shopModal.style.display = 'none');
+  // buy handlers
+  shopModal.addEventListener('click', e => {
+    const btn = e.target.closest('.shopBtn');
+    if(!btn) return;
+    const type = btn.getAttribute('data-buy');
+    const price = Number(btn.getAttribute('data-price')||0);
+    if(player.coins < price){ showDialog("Not enough coins"); return; }
+    player.coins -= price;
+    if(type === 'potion') INV.potion++;
+    else if(type === 'manapotion') INV.manapotion++;
+    else if(type === 'firewand') EQUIP.wand = 'Fire Wand';
+    saveState(); updateUI(); shopCoins.textContent = player.coins;
+    showDialog("Purchased " + type);
+  });
+
+  // cast spell
+  function castSpell(){
+    if(player.mana <= 0) { showDialog('No mana'); return; }
+    player.mana = Math.max(0, player.mana - 1);
+    // direction: use joy direction or default right
+    let dx = joy.x, dy = joy.y;
+    if(Math.abs(dx) < 0.05 && Math.abs(dy) < 0.05){ dx = 1; dy = 0; }
+    let speed = EQUIP.wand === 'Fire Wand' ? 8 : 6;
+    if(EQUIP.weapon === 'Staff') speed += 1;
+    projectiles.push({ x: player.x, y: player.y, vx: dx*speed, vy: dy*speed, life: 60, dmg: EQUIP.weapon === 'Sword' ? 2 : 1 });
+  }
+
+  // use consumable (potion prioritized)
+  function useConsumable(){
+    if(INV.potion > 0 && player.hp < player.level*10){
+      INV.potion--; player.hp = Math.min(player.level*10, player.hp + 6); showDialog('+6 HP');
+    } else if(INV.manapotion > 0 && player.mana < player.level*10){
+      INV.manapotion--; player.mana = Math.min(player.level*10, player.mana + 6); showDialog('+6 Mana');
+    } else showDialog('No usable item or full');
+    saveState(); updateUI();
+  }
+
+  // interaction (talk, chest, shop)
+  function interact(){
+    const m = MAPS[state.currentMap];
+    // NPCs
+    for(let i=0;i<m.npcs.length;i++){
+      const n = m.npcs[i];
+      if(Math.hypot(player.x - n.x, player.y - n.y) < 48){
+        handleNPC(state.currentMap, i, n); return;
+      }
+    }
+    // chest
+    if(state.currentMap === 'home'){
+      const ch = MAPS.home.chest;
+      if(ch && Math.hypot(player.x - ch.x, player.y - ch.y) < 48){
+        if(!state.chestOpened){
+          state.chestOpened = true;
+          INV.potion++; INV.manapotion++; player.coins += 8;
+          showDialog('Chest opened: +1 potion, +1 manapotion, +8 coins');
+          saveState(); updateUI();
+        } else showDialog('Chest already opened');
+        return;
+      }
+      // shop
+      const s = MAPS.home.shop;
+      if(s && Math.hypot(player.x - s.x, player.y - s.y) < 48){ openShop(); return; }
+    }
+    showDialog('Nothing to interact with nearby');
+  }
+
+  function handleNPC(mapKey, index, npcObj){
+    const key = mapKey + '_' + index;
+    const prog = state.npcProgress[key] || 0;
+    if(mapKey === 'home' && index === 0){
+      showDialog(npcObj.dialog);
+      return;
+    }
+    if(mapKey === 'village' && index === 0){
+      if(prog === 0){ state.npcProgress[key] = 0; showDialog('Elder: Defeat 4 monsters and return.'); saveState(); }
+      else if(prog < 4){ showDialog('Elder: You have defeated ' + prog + '/4'); }
+      else if(prog === 4){ showDialog('Elder: Thank you! +10 coins'); player.coins += 10; state.npcProgress[key] = 999; saveState(); updateUI(); }
+      else showDialog('Elder: You are a hero!');
+      return;
+    }
+    if(mapKey === 'forest' && index === 0){
+      if(state.npcProgress[key] === 999) { showDialog('Hermit: Blessed.'); return; }
+      if(INV.manapotion > 0){ INV.manapotion--; player.coins += 5; state.npcProgress[key] = 999; showDialog('Hermit: Thank you +5 coins'); saveState(); updateUI(); }
+      else showDialog('Hermit: Bring me a mana potion.');
+      return;
+    }
+    showDialog(npcObj.dialog || 'Hello');
+  }
+
+  // gates check
+  function checkGates(){
+    const m = MAPS[state.currentMap];
+    if(!m.gates) return;
+    for(const g of m.gates){
+      if(player.x > g.x && player.x < g.x + g.w && player.y > g.y && player.y < g.y + g.h){
+        // teleport to target
+        enterMap(g.target, g.tx, g.ty);
+        return;
+      }
+    }
+  }
+
+  // death and respawn
+  function handleDeath(){
+    showDialog('You died — returning home...');
+    enterMap('home', 3*TILE, 6*TILE);
+    player.hp = Math.max(1, Math.floor(player.level*5));
+    player.mana = Math.max(1, Math.floor(player.level*5));
+    saveState();
+  }
+
+  // update loop logic
+  function updateLogic(){
+    // move player via joystick
+    const speed = player.speed || 2.6;
+    if(Math.abs(joy.x) > 0.02 || Math.abs(joy.y) > 0.02){
+      player.x += joy.x * speed * 4;
+      player.y += joy.y * speed * 4;
+      // clamp within map bounds (tile-based)
+      const m = MAPS[state.currentMap];
+      player.x = Math.max(12, Math.min(m.w*TILE - 12, player.x));
+      player.y = Math.max(12, Math.min(m.h*TILE - 12, player.y));
+    }
+
+    // collisions with walls (axis-aligned simple)
+    const m = MAPS[state.currentMap];
+    // check four corner points
+    const corners = [
+      {x: player.x - 12, y: player.y - 12},
+      {x: player.x + 12, y: player.y - 12},
+      {x: player.x - 12, y: player.y + 12},
+      {x: player.x + 12, y: player.y + 12}
+    ];
+    for(const c of corners){
+      const tx = Math.floor(c.x / TILE), ty = Math.floor(c.y / TILE);
+      if(!m.tiles[ty] || m.tiles[ty][tx] === undefined) continue; // safe guard
+      if(m.tiles[ty][tx] === 1){
+        // push player out a bit camera-style (simple fix: move back)
+        player.x -= joy.x * 6;
+        player.y -= joy.y * 6;
         break;
       }
     }
-  }
 
-  // enemies
-  for(const e of enemies){
-    const dx=player.x-e.x,dy=player.y-e.y,d=Math.hypot(dx,dy);
-    if(d<200){
-      e.x+=dx/d*e.speed*dt;
-      e.y+=dy/d*e.speed*dt;
-      if(d<30 && e.cool<=0){
-        e.cool=40;
-        player.hp--;
-        if(player.hp<=0){player.hp=0;gameOver=true;document.getElementById('btn-restart').style.display='block';}
+    if(player.cool > 0) player.cool--;
+
+    // projectiles update
+    for(let i=projectiles.length-1;i>=0;i--){
+      const p = projectiles[i];
+      p.x += p.vx; p.y += p.vy; p.life--;
+      if(p.life <= 0){ projectiles.splice(i,1); continue; }
+      for(let j=enemies.length-1;j>=0;j--){
+        const e = enemies[j];
+        if(Math.hypot(p.x - e.x, p.y - e.y) < 20){
+          e.hp -= p.dmg || 1;
+          projectiles.splice(i,1);
+          if(e.hp <= 0){
+            enemies.splice(j,1);
+            coins.push({ x: e.x, y: e.y });
+            player.xp += 10;
+            // track NPC quest progress if elder quest active
+            const elderKey = 'village_0';
+            if(state.npcProgress[elderKey] !== 999 && state.currentMap === 'village'){
+              state.npcProgress[elderKey] = (state.npcProgress[elderKey] || 0) + 1;
+            }
+            if(player.xp >= player.level * 50){
+              player.level++; player.hp = player.level*10; player.mana = player.level*10; player.xp = 0;
+              showDialog('Level Up! Lv ' + player.level);
+            }
+            // spawn one replacement after short delay
+            setTimeout(()=> spawnEnemiesForMap(state.currentMap, 1), 800);
+          }
+          break;
+        }
       }
-    } else if(Math.random()<0.01){
-      e.vx=(Math.random()*2-1)*e.speed;e.vy=(Math.random()*2-1)*e.speed;
     }
-    if(e.vx){e.x+=e.vx;e.y+=e.vy;}
-    if(e.cool>0)e.cool--;
+
+    // enemy AI
+    for(const e of enemies){
+      const dx = player.x - e.x, dy = player.y - e.y; const d = Math.hypot(dx,dy) || 1;
+      if(d < 180){
+        e.x += (dx/d) * e.speed;
+        e.y += (dy/d) * e.speed;
+        if(d < 28 && (!e.cool || e.cool <= 0)){
+          e.cool = 40;
+          // enemy damage reduced by armor (if any)
+          const armor = EQUIP.armor === 'Leather' ? 0 : 0; // extend later
+          player.hp -= 1 - armor;
+          if(player.hp <= 0) { player.hp = 0; handleDeath(); }
+        }
+      } else {
+        // wander
+        if(!e.vx || Math.random() < 0.01){ e.vx = (Math.random()*2-1)*0.6; e.vy = (Math.random()*2-1)*0.6; }
+        e.x += e.vx; e.y += e.vy;
+      }
+      if(e.cool > 0) e.cool--;
+    }
+
+    // pick up items
+    for(let i=items.length-1;i>=0;i--){
+      const it = items[i];
+      if(Math.hypot(player.x - it.x, player.y - it.y) < 24){
+        INV[it.type] = (INV[it.type] || 0) + 1;
+        items.splice(i,1);
+        showDialog('Picked up ' + it.type);
+        saveState();
+      }
+    }
+
+    // pick up coins
+    for(let i=coins.length-1;i>=0;i--){
+      const c = coins[i];
+      if(Math.hypot(player.x - c.x, player.y - c.y) < 24){
+        player.coins = (player.coins || 0) + 1; coins.splice(i,1); saveState();
+      }
+    }
+
+    // mana regen
+    if(player.mana < player.level*10 && Math.random() < 0.03) player.mana += 0.03;
+
+    updateUI();
+    checkGates();
+    saveState();
   }
 
-  // coins
-  for(let i=coins.length-1;i>=0;i--){
-    const c=coins[i];
-    if(Math.abs(c.x-player.x)<20 && Math.abs(c.y-player.y)<20){coins.splice(i,1);}
+  // check gates between maps
+  function checkGates(){
+    const m = MAPS[state.currentMap];
+    if(!m.gates) return;
+    for(const g of m.gates){
+      if(player.x > g.x && player.x < g.x + g.w && player.y > g.y && player.y < g.y + g.h){
+        // move to target
+        enterMap(g.target, g.tx, g.ty);
+        return;
+      }
+    }
   }
 
-  cam.x=player.x-W/2;cam.y=player.y-H/2;
-  cam.x=Math.max(0,Math.min(cam.x,MAP_W*TILE-W));
-  cam.y=Math.max(0,Math.min(cam.y,MAP_H*TILE-H));
+  // UI update
+  function updateUI(){
+    hpEl.textContent = Math.max(0, Math.round(player.hp || 0));
+    manaEl.textContent = Math.round(player.mana || 0);
+    xpEl.textContent = Math.round(player.xp || 0);
+    lvlEl.textContent = player.level || 1;
+    coinsEl.textContent = player.coins || 0;
+    invListEl.textContent = `p:${INV.potion||0} m:${INV.manapotion||0}`;
+    equipEl.textContent = `W:${EQUIP.weapon||'—'} Wnd:${EQUIP.wand||'—'} Arm:${EQUIP.armor||'—'}`;
+  }
 
+  // draw everything
+  function drawScene(){
+    // clear
+    ctx.clearRect(0,0,canvas.width/DPR, canvas.height/DPR);
+
+    const map = MAPS[state.currentMap];
+    // camera
+    const camX = Math.max(0, Math.min(player.x - (canvas.width/DPR)/2, map.w*TILE - (canvas.width/DPR)));
+    const camY = Math.max(0, Math.min(player.y - (canvas.height/DPR)/2, map.h*TILE - (canvas.height/DPR)));
+
+    // tiles
+    for(let ty=0; ty<map.h; ty++){
+      for(let tx=0; tx<map.w; tx++){
+        const t = map.tiles[ty][tx];
+        const sx = tx*TILE - camX, sy = ty*TILE - camY;
+        ctx.fillStyle = t ? '#6f5442' : '#8fd37b';
+        ctx.fillRect(sx, sy, TILE, TILE);
+        // light grid
+        ctx.strokeStyle = 'rgba(0,0,0,0.04)';
+        ctx.strokeRect(sx, sy, TILE, TILE);
+      }
+    }
+
+    // gates
+    if(map.gates) for(const g of map.gates){
+      ctx.fillStyle = '#222';
+      ctx.fillRect(g.x - camX, g.y - camY, g.w, g.h);
+      ctx.fillStyle = 'yellow';
+      ctx.font = '10px sans-serif';
+      ctx.fillText('GATE', g.x - camX + g.w/2, g.y - camY + g.h/2 + 4);
+    }
+
+    // chest
+    if(map.chest){
+      const ch = map.chest;
+      ctx.fillStyle = state.chestOpened ? '#444' : '#b8860b';
+      ctx.fillRect(ch.x - camX - 12, ch.y - camY - 12, 24, 18);
+      ctx.fillStyle = '#000'; ctx.font = '10px sans-serif'; ctx.fillText('Chest', ch.x - camX, ch.y - camY - 18);
+    }
+
+    // shop
+    if(map.shop){
+      const s = map.shop;
+      ctx.fillStyle = '#ff9a2e';
+      ctx.fillRect(s.x - camX - 12, s.y - camY - 12, 24, 18);
+      ctx.fillStyle = '#000'; ctx.font = '10px sans-serif'; ctx.fillText('Shop', s.x - camX, s.y - camY - 18);
+    }
+
+    // NPCs
+    for(const n of map.npcs){
+      ctx.font = '26px serif';
+      ctx.fillText('🤠', n.x - camX, n.y - camY + 10);
+      ctx.font = '10px sans-serif'; ctx.fillStyle = '#000'; ctx.fillText(n.name, n.x - camX, n.y - camY - 16);
+    }
+
+    // items
+    for(const it of items){
+      ctx.beginPath(); ctx.fillStyle = it.type === 'potion' ? 'red' : 'blue';
+      ctx.arc(it.x - camX, it.y - camY, 7, 0, Math.PI*2); ctx.fill();
+    }
+
+    // coins
+    for(const c of coins){ ctx.fillStyle = 'gold'; ctx.beginPath(); ctx.arc(c.x - camX, c.y - camY, 6, 0, Math.PI*2); ctx.fill(); }
+
+    // enemies
+    for(const e of enemies){
+      ctx.beginPath(); ctx.fillStyle = '#c43'; ctx.arc(e.x - camX, e.y - camY, 14, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#000'; ctx.font = '10px sans-serif'; ctx.fillText('HP:'+e.hp, e.x - camX, e.y - camY - 20);
+    }
+
+    // projectiles
+    for(const p of projectiles){
+      ctx.beginPath(); ctx.fillStyle = 'orange'; ctx.arc(p.x - camX, p.y - camY, 6, 0, Math.PI*2); ctx.fill();
+    }
+
+    // player (emoji)
+    ctx.font = '36px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('🧙‍♂️', player.x - camX, player.y - camY + 10);
+    // small shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.beginPath(); ctx.ellipse(player.x - camX, player.y - camY + 26, 20, 6, 0, 0, Math.PI*2); ctx.fill();
+  }
+
+  // --- init & start map ---
+  enterMap(state.currentMap, player.x, player.y);
+
+  // main loop
+  let last = performance.now();
+  function loop(now){
+    const dt = Math.min(40, now - last) / 16.6667;
+    last = now;
+    updateLogic(dt);
+    drawScene();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // expose some functions for debugging (optional)
+  window._SAVE = () => saveState();
+  window._ENTER = (m,x,y) => enterMap(m,x,y);
+
+  // debug quick UI update initially
   updateUI();
-}
 
-function draw(){
-  ctx.clearRect(0,0,W,H);
-  const sx0=Math.floor(cam.x/TILE),sy0=Math.floor(cam.y/TILE),
-        sx1=Math.ceil((cam.x+W)/TILE),sy1=Math.ceil((cam.y+H)/TILE);
-  for(let y=sy0;y<sy1;y++)for(let x=sx0;x<sx1;x++){
-    const t=(map[y]||[])[x];
-    const sx=x*TILE-cam.x,sy=y*TILE-cam.y;
-    ctx.fillStyle=t?'#7b6650':'#9ad07a';
-    ctx.fillRect(sx,sy,TILE,TILE);
-  }
-
-  for(const c of coins){ctx.fillStyle='#ffdb3d';ctx.beginPath();ctx.arc(c.x-cam.x,c.y-cam.y,6,0,Math.PI*2);ctx.fill();}
-  for(const e of enemies){
-    ctx.fillStyle='#c33';
-    ctx.beginPath();ctx.arc(e.x-cam.x,e.y-cam.y,15,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='black';ctx.font='10px sans-serif';ctx.textAlign='center';
-    ctx.fillText('HP:'+e.hp,e.x-cam.x,e.y-cam.y-20);
-  }
-
-  for(const p of projectiles){
-    ctx.fillStyle='orange';
-    ctx.beginPath();ctx.arc(p.x-cam.x,p.y-cam.y,6,0,Math.PI*2);ctx.fill();
-  }
-
-  const px=player.x-cam.x,py=player.y-cam.y;
-  ctx.font='32px serif';ctx.textAlign='center';
-  ctx.fillText('🧙‍♂️',px,py+12);
-}
+})();
 </script>
 </body>
 </html>
