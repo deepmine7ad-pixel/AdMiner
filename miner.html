@@ -1,133 +1,189 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { getFirestore, doc, getDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-const firebaseConfig ={
-  apiKey:"AIzaSyCgqrZ-qSf1dYNNEdG3L1MePYr4CvNLAE8",
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>🖥️ Miner (Firebase)</title>
+<style>
+body{background:#000;color:#fff;font-family:system-ui,Segoe UI,Roboto,Arial;padding:18px;max-width:720px;margin:auto}
+button{padding:10px 14px;margin:6px;border-radius:8px;border:1px solid #333;cursor:pointer;font-weight:bold}
+#startMine{background:#0f0;color:#000;}
+#stopMine{background:#f00;color:#fff;}
+header{display:flex;justify-content:space-between;align-items:center}
+h1{margin:0 0 12px 0}.small{color:#aaa;font-size:0.9rem}
+.note{color:#888;font-size:0.85rem;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🖥️ Miner</h1>
+  <a href="wallet.html" style="color:#0f0;">Wallet</a>
+</header>
+
+<p class="small">Mining: <strong>+0.000003</strong> coins/sec for 9 hours. Ad boost stacks when active.</p>
+<p>Status: <strong id="status">—</strong></p>
+<p>Time left: <strong id="timeleft">—</strong></p>
+<button id="startMine">Start Mining (9h)</button>
+<button id="stopMine">Stop Mining</button>
+<hr />
+<p>Balance: 📀 <strong id="balance">0.000000</strong></p>
+<p class="note" id="signed">Connecting to Firebase…</p>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getFirestore, doc, getDoc, setDoc, updateDoc, runTransaction, onSnapshot
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+/* ---------- FIREBASE CONFIG (your provided object) ---------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyCgqrZ-qSf1dYNNEdG3L1MePYr4CvNLAE8",
   authDomain: "adminer-341ae.firebaseapp.com",
   projectId: "adminer-341ae",
   storageBucket: "adminer-341ae.firebasestorage.app",
   messagingSenderId: "457130849493",
   appId: "1:457130849493:web:160485e9c436008bf0de5c",
   measurementId: "G-H9D4FW3BT4"
-  };
+};
+/* ----------------------------------------------------------- */
 
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-  // 🔐 Auto-login anonymous user
-  signInAnonymously(auth)
-    .then(() => console.log("Signed in anonymously"))
-    .catch(console.error);
-</script>
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6945551199712522"
-     crossorigin="anonymous"></script>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>🖥️ </title>
-<style>
-body{background:#000;color:#fff;font-family:system-ui,Segoe UI,Roboto,Arial;padding:18px;max-width:680px;margin:auto}
-button{padding:10px 14px;margin:6px;border-radius:8px;border:1px solid #333;cursor:pointer;font-weight:bold}
-#startMine{background:#0f0;color:#000;}
-#stopMine{background:#f00;color:#fff;}
-header{display:flex;justify-content:space-between;align-items:center}
-h1{margin:0 0 12px 0;}
-.small{color:#aaa;font-size:0.9rem}
-</style>
-</head>
-<body>
-<header>
-  <h1></h1>
-  <a href="wallet.html" style="color:#0f0;">Wallet</a>
-</header>
-<p class="small">🖥️MINER : Mining gives <strong>+0.000003</strong> coins per second for 9 hours. After that you must start again.</p>
+const MINING_RATE = 0.000003;       // per second
+const BOOST_RATE = 0.00003;         // ad boost per second (stacks)
+const MINING_DURATION_MS = 9 * 60 * 60 * 1000; // 9 hours
 
-<p>Status: <strong id="status">—</strong></p>
-<p>Time left: <strong id="timeleft">—</strong></p>
-<button id="startMine">Start Mining (9h)</button>
-<button id="stopMine">Stop Mining</button>
+const statusEl = document.getElementById('status');
+const timeEl = document.getElementById('timeleft');
+const balanceEl = document.getElementById('balance');
+const signedEl = document.getElementById('signed');
 
-<hr>
-<p>Balance: 📀 <strong id="balance">0.000000</strong></p>
+let uid = null;
+let unsubSnapshot = null;
 
-<script>
-const MINING_RATE = 0.000003;
-const MINING_DURATION_MS = 9 * 60 * 60 * 1000;
+// Sign in anonymously
+signInAnonymously(auth).catch(err => {
+  signedEl.textContent = 'Firebase auth error: ' + err.message;
+});
 
-if(!localStorage.device_id)localStorage.device_id='dev-'+Math.random().toString(36).slice(2,11);
-if(!localStorage.wallet_balance)localStorage.wallet_balance='0';
-if(!localStorage.last_update)localStorage.last_update=Date.now();
+onAuthStateChanged(auth, async user => {
+  if (!user) {
+    signedEl.textContent = 'Not signed in';
+    return;
+  }
+  uid = user.uid;
+  signedEl.textContent = 'Signed in (anon). UID: ' + uid;
+  await ensureUserDoc();
+  listenUserDoc();
+  startAutoTick(); // start background tick
+});
 
-function now(){return Date.now();}
+async function ensureUserDoc(){
+  const userRef = doc(db, 'users', uid);
+  const snap = await getDoc(userRef);
+  if (!snap.exists()){
+    const now = Date.now();
+    await setDoc(userRef, {
+      device_id: 'dev-' + Math.random().toString(36).slice(2,11),
+      wallet_balance: 0,
+      last_update: now,
+      mining_end: 0,
+      boost_end: 0,
+      last_ad_boost: 0,
+      history: [],
+      whole_milestones: []
+    });
+  }
+}
 
+// Listen for realtime updates and update UI
+function listenUserDoc(){
+  const userRef = doc(db, 'users', uid);
+  if (unsubSnapshot) unsubSnapshot();
+  unsubSnapshot = onSnapshot(userRef, snap => {
+    if (!snap.exists()) return;
+    const d = snap.data();
+    balanceEl.textContent = (parseFloat(d.wallet_balance||0)).toFixed(6);
+    const now = Date.now();
+    if (now < (d.mining_end || 0)){
+      statusEl.textContent = 'Mining';
+      timeEl.textContent = msToHMS((d.mining_end||0) - now);
+    } else {
+      statusEl.textContent = 'Stopped';
+      timeEl.textContent = '0s';
+    }
+  });
+}
+
+// Convert ms -> H M S
 function msToHMS(ms){
- if(ms<=0)return'0s';
- const s=Math.floor(ms/1000);
- const h=Math.floor(s/3600);
- const m=Math.floor((s%3600)/60);
- const sec=s%60;
- return `${h}h ${m}m ${sec}s`;
+  if (ms <= 0) return '0s';
+  const s = Math.floor(ms/1000);
+  const h = Math.floor(s/3600);
+  const m = Math.floor((s%3600)/60);
+  const sec = s%60;
+  return `${h}h ${m}m ${sec}s`;
 }
 
-function updateMining(){
- const t=now();
- const last=parseInt(localStorage.last_update||t);
- let bal=parseFloat(localStorage.wallet_balance||0);
- const end=parseInt(localStorage.mining_end||0);
- const boostEnd=parseInt(localStorage.boost_end||0);
-
- const elapsed=(t-last)/1000;
- let rate=0;
- if(t<end)rate+=MINING_RATE;
- if(t<boostEnd)rate+=0.00003;
-
- const delta=rate*elapsed;
- if(delta>0){
-   bal+=delta;
-   const dev=localStorage.device_id;
-   const key='wallet_history_'+dev;
-   let hist=[];
-   try{hist=JSON.parse(localStorage.getItem(key)||'[]');}catch(e){}
-   hist.push({t,added:Number(delta.toFixed(8)),reason:(t<end?'mining':'')+(t<boostEnd?'+adboost':'')});
-   localStorage.setItem(key,JSON.stringify(hist));
- }
- localStorage.wallet_balance=bal;
- localStorage.last_update=t;
- document.getElementById('balance').textContent=bal.toFixed(6);
- const s=document.getElementById('status');
- const tl=document.getElementById('timeleft');
- if(t<end){s.textContent='Mining';tl.textContent=msToHMS(end-t);}else{s.textContent='Stopped';tl.textContent='0s';}
+// Periodic transactional tick: calculates elapsed time and credits mined amount
+let tickInterval = null;
+function startAutoTick(){
+  if (tickInterval) return;
+  tickInterval = setInterval(() => {
+    transactionalTick().catch(e => console.error('tick err', e));
+  }, 5000); // every 5 seconds
+  // run once immediately
+  transactionalTick().catch(e => console.error('tick err', e));
 }
-document.getElementById('startMine').onclick=()=>{
- const t=now();
- localStorage.mining_end=t+MINING_DURATION_MS;
- localStorage.last_update=t;
- const dev=localStorage.device_id;
- const key='wallet_history_'+dev;
- let hist=[];
- try{hist=JSON.parse(localStorage.getItem(key)||'[]');}catch(e){}
- hist.push({t,event:'mining_started',until:t+MINING_DURATION_MS});
- localStorage.setItem(key,JSON.stringify(hist));
- updateMining();
-};
-document.getElementById('stopMine').onclick=()=>{
- const t=now();
- localStorage.mining_end=t;
- localStorage.last_update=t;
- const dev=localStorage.device_id;
- const key='wallet_history_'+dev;
- let hist=[];
- try{hist=JSON.parse(localStorage.getItem(key)||'[]');}catch(e){}
- hist.push({t,event:'mining_stopped'});
- localStorage.setItem(key,JSON.stringify(hist));
- updateMining();
-};
-setInterval(updateMining,1000);
-updateMining();
+
+async function transactionalTick(){
+  if (!uid) return;
+  const userRef = doc(db, 'users', uid);
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(userRef);
+    if (!snap.exists()) throw new Error('user missing');
+    const d = snap.data();
+    const now = Date.now();
+    const last = d.last_update || now;
+    let elapsed = (now - last) / 1000.0;
+    if (elapsed <= 0) {
+      tx.update(userRef, { last_update: now });
+      return;
+    }
+    let rate = 0;
+    if (now < (d.mining_end || 0)) rate += MINING_RATE;
+    if (now < (d.boost_end || 0)) rate += BOOST_RATE;
+    const delta = rate * elapsed;
+    const newBalance = (parseFloat(d.wallet_balance || 0) + delta);
+    // append history entry
+    const hist = (d.history || []).concat([{ t: now, added: Number(delta.toFixed(8)), reason: (now < (d.mining_end||0)?'mining':'') + (now < (d.boost_end||0)?'+adboost':'') }]);
+    tx.update(userRef, { wallet_balance: newBalance, last_update: now, history: hist });
+  });
+}
+
+// Start mining button
+document.getElementById('startMine').addEventListener('click', async ()=>{
+  if (!uid) return alert('Not signed in yet');
+  const userRef = doc(db, 'users', uid);
+  const now = Date.now();
+  await updateDoc(userRef, { mining_end: now + MINING_DURATION_MS, last_update: now });
+  // add a history entry client-side (transactionalTick will also log)
+  // UI will update via onSnapshot
+});
+
+// Stop mining button
+document.getElementById('stopMine').addEventListener('click', async ()=>{
+  if (!uid) return alert('Not signed in yet');
+  const userRef = doc(db, 'users', uid);
+  const now = Date.now();
+  await updateDoc(userRef, { mining_end: now, last_update: now });
+});
+
+// helper for updateDoc import
+import { updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 </script>
 </body>
 </html>
