@@ -1,6 +1,29 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getFirestore, doc, getDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+const firebaseConfig ={
+  apiKey:"AIzaSyCgqrZ-qSf1dYNNEdG3L1MePYr4CvNLAE8",
+  authDomain: "adminer-341ae.firebaseapp.com",
+  projectId: "adminer-341ae",
+  storageBucket: "adminer-341ae.firebasestorage.app",
+  messagingSenderId: "457130849493",
+  appId: "1:457130849493:web:160485e9c436008bf0de5c",
+  measurementId: "G-H9D4FW3BT4"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  // 🔐 Auto-login anonymous user
+  signInAnonymously(auth)
+    .then(() => console.log("Signed in anonymously"))
+    .catch(console.error);
+</script>
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6945551199712522"
      crossorigin="anonymous"></script>
 <meta charset="utf-8">
